@@ -71,10 +71,14 @@ const WalletMigration = () => {
             const BASE_URL = import.meta.env.VITE_API_BASE_URL;
             const response = await fetch(`${BASE_URL}/migrate-wallet`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "ngrok-skip-browser-warning": "69420"
+                },
                 body: JSON.stringify({
                     oldWalletAddress: migrationData.refugee.walletAddress,
-                    newWalletAddress: migrationData.newAddress === 'Awaiting Handshake...' ? account : migrationData.newAddress
+                    newWalletAddress: migrationData.newAddress === 'Awaiting Handshake...' ? account : migrationData.newAddress,
+                    walletType: 'pera'
                 })
             });
 

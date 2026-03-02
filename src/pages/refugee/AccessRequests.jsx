@@ -35,13 +35,8 @@ const AccessRequests = () => {
 
             const data = await response.json();
 
-            // DYNAMIC FILTERING: Get current session wallet strictly from localStorage
-            const sessionWallet = localStorage.getItem('walletAddress') || localStorage.getItem('demo_account');
-
-            // Filter strictly by session wallet address
-            const myRequests = data.filter(req => req.walletAddress === sessionWallet);
-
-            setRequests(myRequests);
+            // BYPASS FILTERING FOR DEMO: Show all requests regardless of wallet
+            setRequests(data);
         } catch (error) {
             console.error("Fetch error:", error);
             showToast('error', 'Sync Error', 'Could not sync with the blockchain ledger.');
@@ -80,13 +75,18 @@ const AccessRequests = () => {
             await new Promise(r => setTimeout(r, 1000));
 
             const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-            const response = await fetch(`${BASE_URL}/access/approve`, {
+            const response = await fetch(`${BASE_URL}/verify-signature`, {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                     "ngrok-skip-browser-warning": "69420"
                 },
-                body: JSON.stringify({ requestId: req.id })
+                body: JSON.stringify({
+                    requestId: req.id,
+                    walletAddress: account,
+                    signature: `SIG_${btoa(account || '').slice(0, 16)}`, // Simulated cryptographic signature data
+                    timestamp: Date.now()
+                })
             });
 
             if (!response.ok) throw new Error("Failed to approve on backend");

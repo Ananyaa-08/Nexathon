@@ -64,7 +64,10 @@ const RequestAccess = () => {
             // Step 1: Create the request on the backend
             const response = await fetch(`${BASE_URL}/access/request`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "ngrok-skip-browser-warning": "69420"
+                },
                 body: JSON.stringify({
                     walletAddress: walletAddress.trim(),
                     requestedField: selectedField.id,
