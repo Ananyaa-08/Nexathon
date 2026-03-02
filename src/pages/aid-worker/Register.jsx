@@ -107,13 +107,13 @@ const Register = () => {
             // 3. Make the UI show success!
             setSubmitStage(6); // Skip the fake visual steps to show it's done
             setShowSuccess(true);
-            setIsSubmitting(false);
             showToast('success', 'Registration Complete', 'Refugee identity permanently saved by backend.');
 
         } catch (error) {
             console.error("Connection Error:", error);
-            setIsSubmitting(false);
             showToast('error', 'Network Error', 'Failed to connect to the backend server.');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 

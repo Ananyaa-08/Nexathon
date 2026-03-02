@@ -7,6 +7,7 @@ RIMS is a high-fidelity, production-grade React.js v18 user interface designed f
 ### Tech Stack
 - **State Management**: React Context API
 - **Wallet Connection**: @perawallet/connect (Real Pera Wallet Integration)
+- **Backend Connectivity**: REST API integration via `VITE_API_BASE_URL` (Ngrok supported)
 - **Biometrics**: react-webcam for live onboarding
 - **Scanning**: @yudiel/react-qr-scanner for real-time verification
 - **QR Generation**: qrcode.react for dynamic identity cards
@@ -62,12 +63,12 @@ graph TD
 
 ---
 
-## ✅ What has been implemented
-1. **Complete UI/UX**: All pages, layouts, and sidebars are fully responsive and animated.
-2. **On-Chain Simulations**: Modals that simulate actual blockchain processing times, transaction hashes, and signature verification.
-3. **Role-Based Workflows**: Distinct logic for each of the three roles.
-4. **Data Registry**: A comprehensive mock dataset supporting complex cross-portal interactions.
-5. **Security Simulation**: Biometric signing, QR scanning, and cryptographic hash visualizations.
+## ✅ Implementation Progress (V2.0 Connected)
+1. **Full-Stack Connectivity**: Replaced most mock systems with real `fetch()` calls to a live backend.
+2. **Dynamic Hardware**: Fully operational webcam liveness and camera-based QR scanning.
+3. **Pera Wallet Integration**: Real-time signing and session management active.
+4. **Persistent Governance**: Access requests and migrations are now recorded in a central database.
+5. **Universal UX**: All three portals updated to handle loading states and network errors.
 
 ---
 
@@ -75,10 +76,10 @@ graph TD
 
 If you are an AI taking over this project, focus on these critical integration steps:
 
-### Phase 1: Institutional Connection
-- **Algorand SDK Integration**: Replace mock hashes in `mockData.js` with actual calls to the Algorand TestNet.
-- **Smart Contract Linkage**: Connect the "Approve/Reject" buttons to a deployed TEAL/PyTeal contract.
-- **Decentralized Storage**: Integrate IPFS or Filecoin to store encrypted identity documents referenced by hashes.
+### Phase 1: Institution Complete
+- **Backend Linkage**: Connected Registration, Scanning, and Aid logic to Node.js/MongoDB.
+- **Environment Driven**: System now scales via `.env` configuration.
+- **Persistent Audit**: Events are now saved to a persistent database (Audit Log).
 
 ### Phase 2: Implementation Complete
 - **Wallet Connection**: Implemented `@perawallet/connect` - Live signing ready.

@@ -36,7 +36,7 @@ const AidDistribution = () => {
 
                 if (!response.ok) throw new Error("Not found");
                 const profile = await response.json();
-setSelectedRefugee({ ...profile, walletAddress: searchTerm.trim() });
+                setSelectedRefugee({ ...profile, walletAddress: searchTerm.trim() });
                 showToast('success', 'Refugee Found', 'Profile loaded for aid distribution.');
             } catch (error) {
                 showToast('error', 'Not Found', 'No refugee found with that address.');
@@ -79,18 +79,12 @@ setSelectedRefugee({ ...profile, walletAddress: searchTerm.trim() });
             }
 
             // Success: Update UI
-            setAidStatus(prev => prev.map(a =>
-                a.id === pendingAid.id ? { ...a, claimed: true, timestamp: new Date().toISOString() } : a
-            ));
-            setIsProcessing(false);
-            setPendingAid(null);
-            showToast('success', 'Transaction Confirmed', 'Backend confirmed aid distribution.');
-
         } catch (error) {
             console.error("Claim Error:", error);
+            showToast('error', 'Action Blocked', error.message);
+        } finally {
             setIsProcessing(false);
             setPendingAid(null);
-            showToast('error', 'Action Blocked', error.message);
         }
     };
 

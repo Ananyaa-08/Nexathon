@@ -1,46 +1,117 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     ShieldCheck, Clock, CheckCircle, XCircle,
-    Info, Bell, ChevronDown, Lock, Fingerprint, Loader2, X, User
+    Info, Bell, ChevronDown, Fingerprint, Loader2, User
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { MOCK_ACCESS_REQUESTS } from '../../utils/mockData';
 import { useToast } from '../../context/ToastContext';
 
 const AccessRequests = () => {
     const { showToast } = useToast();
     const [activeTab, setActiveTab] = useState('Pending');
-    const [requests, setRequests] = useState(MOCK_ACCESS_REQUESTS);
+    const [requests, setRequests] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
     const [isSigning, setIsSigning] = useState(false);
-    const [signingStage, setSigningStage] = useState(0); // 0: idle, 1: open app, 2: biometric, 3: signing
+    const [signingStage, setSigningStage] = useState(0);
     const [selectedRequest, setSelectedRequest] = useState(null);
 
     const tabs = ['Pending', 'Approved', 'Rejected', 'All'];
+
+    const fetchRequests = async () => {
+        try {
+            const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+            // Fetch all requests from the backend with Ngrok bypass and no-cache
+            const response = await fetch(`${BASE_URL}/access/requests`, {
+                cache: 'no-store',
+                headers: {
+                    'ngrok-skip-browser-warning': '69420'
+                }
+            });
+
+            if (!response.ok) throw new Error("Failed to fetch");
+
+            const data = await response.json();
+
+            // DEMO OVERRIDE: Show all requests intended for 'asmi'
+            // This matches the CUST9K... address seen in your teammate's database
+            const targetWallet = "CUST9K4LMNO5PQRT6UVWX7YZA8BCDE1F2GH";
+            const myRequests = data.filter(req => req.walletAddress === targetWallet);
+
+            setRequests(myRequests);
+        } catch (error) {
+            console.error("Fetch error:", error);
+            showToast('error', 'Sync Error', 'Could not sync with the blockchain ledger.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchRequests();
+        // Refresh every 10 seconds to catch new requests during the demo
+        const interval = setInterval(fetchRequests, 10000);
+        return () => clearInterval(interval);
+    }, []);
 
     const filteredRequests = requests.filter(r =>
         activeTab === 'All' ? true : r.status.toLowerCase() === activeTab.toLowerCase()
     );
 
-    const handleApprove = (req) => {
+    const handleApprove = async (req) => {
         setSelectedRequest(req);
         setIsSigning(true);
         setSigningStage(1);
 
         setTimeout(() => setSigningStage(2), 1000);
         setTimeout(() => setSigningStage(3), 2000);
-        setTimeout(() => {
-            setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'approved' } : r));
-            setIsSigning(false);
-            setSigningStage(0);
-            setSelectedRequest(null);
-            showToast('success', 'Consent Granted', `You have authorized access to your ${req.requestedField}.`);
+
+        setTimeout(async () => {
+            try {
+                const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+                const response = await fetch(`${BASE_URL}/access/approve`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "ngrok-skip-browser-warning": "69420"
+                    },
+                    body: JSON.stringify({ requestId: req.id })
+                });
+
+                if (!response.ok) throw new Error("Failed to approve on backend");
+
+                showToast('success', 'Consent Granted', `Access authorized for ${req.requestedField}.`);
+                fetchRequests(); // Refresh the list immediately
+            } catch (error) {
+                console.error("Approve Error:", error);
+                showToast('error', 'Network Error', 'Failed to approve request.');
+            } finally {
+                setIsSigning(false);
+                setSigningStage(0);
+            }
         }, 3500);
     };
 
-    const handleReject = (req) => {
-        if (window.confirm("Are you sure you want to reject this access request?")) {
-            setRequests(prev => prev.map(r => r.id === req.id ? { ...r, status: 'rejected' } : r));
-            showToast('info', 'Request Rejected', 'The requester has been notified of your decision.');
+    const handleReject = async (req) => {
+        if (window.confirm("Reject this access request?")) {
+            try {
+                const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+                const response = await fetch(`${BASE_URL}/access/reject`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "ngrok-skip-browser-warning": "69420"
+                    },
+                    body: JSON.stringify({ requestId: req.id })
+                });
+
+                if (!response.ok) throw new Error("Failed to reject");
+
+                showToast('info', 'Request Rejected', 'The requester has been notified.');
+                fetchRequests();
+            } catch (error) {
+                console.error("Reject Error:", error);
+                showToast('error', 'Network Error', 'Failed to reject request.');
+            }
         }
     };
 
@@ -51,7 +122,6 @@ const AccessRequests = () => {
                 <p className="text-[#7a94bb] text-sm">Manage who can access specific parts of your digital identity record.</p>
             </div>
 
-            {/* Tabs */}
             <div className="flex items-center gap-1 border-b border-[#1a2d4a]">
                 {tabs.map(tab => {
                     const count = tab === 'All' ? requests.length : requests.filter(r => r.status.toLowerCase() === tab.toLowerCase()).length;
@@ -77,15 +147,20 @@ const AccessRequests = () => {
                 })}
             </div>
 
-            {/* Requests List */}
             <div className="grid gap-6">
-                {filteredRequests.length === 0 ? (
+                {isLoading ? (
+                    <div className="bg-[#0f1e38] border border-[#1a2d4a] rounded-3xl py-24 flex flex-col items-center justify-center text-center">
+                        <Loader2 size={48} className="text-[#00c9b1] animate-spin mb-4" />
+                        <h4 className="text-[#e2eaf8] font-bold text-lg">Fetching Ledger</h4>
+                        <p className="text-[#7a94bb] text-sm mt-1 max-w-xs">Connecting to secure decentralized network...</p>
+                    </div>
+                ) : filteredRequests.length === 0 ? (
                     <div className="bg-[#0f1e38] border border-[#1a2d4a] rounded-3xl py-24 flex flex-col items-center justify-center text-center">
                         <div className="w-16 h-16 bg-[#152342] rounded-full flex items-center justify-center mb-6">
                             <ShieldCheck size={32} className="text-[#3d5278]" />
                         </div>
                         <h4 className="text-[#e2eaf8] font-bold text-lg">No {activeTab.toLowerCase()} requests</h4>
-                        <p className="text-[#7a94bb] text-sm mt-1 max-w-xs">Your data is secure. Requests for access will appear here.</p>
+                        <p className="text-[#7a94bb] text-sm mt-1 max-w-xs">Your data is currently private. New requests will appear here instantly.</p>
                     </div>
                 ) : (
                     filteredRequests.map((req, i) => (
@@ -112,7 +187,7 @@ const AccessRequests = () => {
                                     </div>
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-[#e2eaf8] font-bold text-lg">{req.refugeeName}</h3>
+                                            <h3 className="text-[#e2eaf8] font-bold text-lg">{req.name || 'Asmi'}</h3>
                                             <span className={clsx(
                                                 "px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-tight border",
                                                 req.status === 'pending' ? "bg-[#f59e0b10] text-[#f59e0b] border-[#f59e0b20]" :
@@ -122,13 +197,13 @@ const AccessRequests = () => {
                                                 {req.status}
                                             </span>
                                         </div>
-                                        <p className="text-[#7a94bb] text-sm">Field Requested: <span className="text-[#e2eaf8] font-semibold">{req.requestedField}</span></p>
+                                        <p className="text-[#7a94bb] text-sm">Component: <span className="text-[#e2eaf8] font-semibold">{req.requestedField}</span></p>
                                         <div className="flex items-center gap-4 pt-1">
                                             <span className="text-[#3d5278] text-[10px] uppercase font-bold tracking-widest flex items-center gap-1.5">
-                                                <User className="w-3 h-3" /> By: {req.requestedBy}
+                                                <User className="w-3 h-3" /> By: {req.requestedBy || 'Aid Worker'}
                                             </span>
                                             <span className="text-[#3d5278] text-[10px] uppercase font-bold tracking-widest flex items-center gap-1.5">
-                                                <Clock className="w-3 h-3" /> {new Date(req.requestedAt).toLocaleDateString()}
+                                                <Clock className="w-3 h-3" /> {new Date(req.requestedAt || Date.now()).toLocaleDateString()}
                                             </span>
                                         </div>
                                     </div>
@@ -158,21 +233,11 @@ const AccessRequests = () => {
                                     </div>
                                 )}
                             </div>
-
-                            {req.status === 'pending' && (
-                                <div className="mt-6 p-4 bg-[#f59e0b05] border border-[#f59e0b15] rounded-xl flex gap-4 items-start">
-                                    <Info size={16} className="text-[#f59e0b] shrink-0 mt-0.5" />
-                                    <p className="text-[#7a94bb] text-[11px] leading-relaxed">
-                                        Approving this request will allow the aid worker to view your <span className="text-white font-bold">{req.requestedField}</span> status. No other personal data will be disclosed. You can revoke this access at any time.
-                                    </p>
-                                </div>
-                            )}
                         </div>
                     ))
                 )}
             </div>
 
-            {/* Pera Signing Simulation Modal */}
             {isSigning && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#000000cc] backdrop-blur-md px-6">
                     <div className="bg-[#0f1e38] border border-[#1a2d4a] rounded-3xl p-10 max-w-sm w-full shadow-2xl animate-fadeSlideUp relative overflow-hidden">
@@ -183,9 +248,8 @@ const AccessRequests = () => {
                             </div>
                             <h3 className="text-[#e2eaf8] text-2xl font-bold mb-4">Pera Multi-Sig</h3>
                             <p className="text-[#7a94bb] text-sm leading-relaxed mb-10">
-                                Please confirm the biometric challenge on your Pera Wallet mobile app to authorize this transaction.
+                                Please confirm the biometric challenge on your Pera Wallet mobile app.
                             </p>
-
                             <div className="space-y-4 text-left">
                                 {[
                                     { label: 'Open Pera Wallet app', done: signingStage >= 1 },

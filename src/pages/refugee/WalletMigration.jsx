@@ -44,13 +44,30 @@ const WalletMigration = () => {
         }, 2000);
     };
 
-    const finalSubmit = () => {
+   const finalSubmit = async () => {
         setIsProcessing(true);
-        setTimeout(() => {
+        
+        try {
+            const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+            const response = await fetch(`${BASE_URL}/migrate-wallet`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ 
+                    oldWalletAddress: migrationData.refugee.walletAddress,
+                    newWalletAddress: migrationData.newAddress
+                })
+            });
+
+            if (!response.ok) throw new Error("Backend failed to migrate wallet");
+
             setIsProcessing(false);
-            nextStep();
+            nextStep(); // Moves to the Success screen
             showToast('success', 'Migration Complete', 'Your identity is now under your full sovereignty.');
-        }, 4000);
+        } catch (error) {
+            console.error("Migration Error:", error);
+            setIsProcessing(false);
+            showToast('error', 'Migration Failed', 'Could not complete the migration on the backend.');
+        }
     };
 
     return (

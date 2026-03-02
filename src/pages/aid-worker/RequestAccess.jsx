@@ -1,50 +1,96 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Key, ShieldCheck, Globe, User, FileText,
     Search, CheckCircle, Clock, AlertCircle, ChevronRight, Loader2
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { MOCK_REFUGEES, MOCK_ACCESS_REQUESTS } from '../../utils/mockData';
 import { useToast } from '../../context/ToastContext';
-import { LoadingSpinner } from '../../components/ui/Common';
 
 const RequestAccess = () => {
     const { showToast } = useToast();
-    const [selectedRefugee, setSelectedRefugee] = useState(null);
+    const [walletAddress, setWalletAddress] = useState(''); // Manually type/paste wallet
     const [selectedField, setSelectedField] = useState(null);
     const [reason, setReason] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [requests, setRequests] = useState(MOCK_ACCESS_REQUESTS);
+    const [requests, setRequests] = useState([]);
     const [filter, setFilter] = useState('All');
+    const [isLoading, setIsLoading] = useState(true);
 
     const fields = [
-        { id: 'age', label: 'Age Verification', icon: ShieldCheck },
+        { id: 'ageProof', label: 'Age Verification', icon: ShieldCheck },
         { id: 'nationality', label: 'Nationality Proof', icon: Globe },
         { id: 'identity', label: 'Full Identity', icon: User },
         { id: 'record', label: 'Registration Record', icon: FileText },
     ];
 
-    const handleSubmit = () => {
-        if (!selectedRefugee || !selectedField) return;
+    // 1. Fetch Request History on Load from Database
+    const fetchHistory = async (silent = false) => {
+        try {
+            const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+            const response = await fetch(`${BASE_URL}/access/requests`, {
+                headers: {
+                    'ngrok-skip-browser-warning': '69420'
+                }
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setRequests(data);
+            }
+        } catch (err) {
+            console.error("History fetch error:", err);
+            if (!silent) {
+                showToast('error', 'Sync Error', 'Could not refresh access history.');
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchHistory();
+    }, []);
+
+    // 2. The REAL Backend Request Function
+    const handleRequest = async () => {
+        if (!walletAddress || !selectedField) {
+            showToast('warning', 'Missing Info', 'Please enter a wallet address and select a field.');
+            return;
+        }
 
         setIsSubmitting(true);
-        setTimeout(() => {
-            const newRequest = {
-                id: `REQ-00${requests.length + 1}`,
-                refugeeID: selectedRefugee.id,
-                refugeeName: selectedRefugee.name,
-                requestedField: selectedField.label,
-                requestedBy: 'Aid Worker Maria Santos',
-                requestedAt: new Date().toISOString(),
-                status: 'pending'
-            };
-            setRequests([newRequest, ...requests]);
-            setIsSubmitting(false);
-            setSelectedRefugee(null);
+        try {
+            const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+            // Step 1: Create the request on the backend
+            const response = await fetch(`${BASE_URL}/access/request`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    walletAddress: walletAddress.trim(),
+                    requestedField: selectedField.id,
+                    requestedBy: "Aid Worker Admin"
+                })
+            });
+
+            if (!response.ok) throw new Error("Backend failed to create request");
+
+            // Success Toast
+            showToast('success', 'Request Dispatched', `Request created successfully.`);
+
+            // Step 2: Clear Form
+            setWalletAddress('');
             setSelectedField(null);
             setReason('');
-            showToast('success', 'Request Submitted', 'Consent request sent to refugee.');
-        }, 1500);
+
+            // Step 3: Refresh the history list from the backend (silently)
+            fetchHistory(true);
+
+        } catch (error) {
+            console.error("Request Error:", error);
+            showToast('error', 'Request Failed', 'Could not connect to the governance network.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const filteredRequests = requests.filter(r =>
@@ -64,35 +110,20 @@ const RequestAccess = () => {
                     </div>
 
                     <div className="space-y-8">
-                        {/* Select Refugee */}
                         <div className="space-y-4">
-                            <label className="block text-[#7a94bb] text-[10px] font-bold uppercase tracking-widest pl-2">1. Select Subject</label>
-                            <select
-                                className="w-full bg-[#060d1f] border border-[#1a2d4a] rounded-xl px-4 py-4 text-[#e2eaf8] text-sm focus:outline-none focus:border-[#00c9b1] cursor-pointer"
-                                onChange={(e) => setSelectedRefugee(MOCK_REFUGEES.find(r => r.id === e.target.value))}
-                                value={selectedRefugee?.id || ''}
-                            >
-                                <option value="" disabled>Choose a refugee...</option>
-                                {MOCK_REFUGEES.map(r => (
-                                    <option key={r.id} value={r.id}>{r.name} ({r.id})</option>
-                                ))}
-                            </select>
-
-                            {selectedRefugee && (
-                                <div className="flex items-center gap-3 p-3 bg-[#152342] rounded-xl border border-[#1a2d4a] animate-fadeSlideUp">
-                                    <div className="w-10 h-10 bg-[#00c9b110] text-[#00c9b1] rounded-lg flex items-center justify-center font-bold text-sm">
-                                        {selectedRefugee.name.split(' ').map(n => n[0]).join('')}
-                                    </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-bold text-[#e2eaf8]">{selectedRefugee.name}</p>
-                                        <p className="text-[10px] text-[#7a94bb]">{selectedRefugee.campID} • {selectedRefugee.nationality}</p>
-                                    </div>
-                                    <span className="text-[10px] font-mono text-[#00c9b1]">{selectedRefugee.id}</span>
-                                </div>
-                            )}
+                            <label className="block text-[#7a94bb] text-[10px] font-bold uppercase tracking-widest pl-2">1. Refugee Wallet Address</label>
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[#3d5278]" size={18} />
+                                <input
+                                    type="text"
+                                    className="w-full bg-[#060d1f] border border-[#1a2d4a] rounded-xl pl-12 pr-4 py-4 text-[#e2eaf8] text-sm focus:outline-none focus:border-[#00c9b1] placeholder-[#3d5278]"
+                                    placeholder="Paste CUST... or PERA... address"
+                                    value={walletAddress}
+                                    onChange={(e) => setWalletAddress(e.target.value)}
+                                />
+                            </div>
                         </div>
 
-                        {/* Select Field */}
                         <div className="space-y-4">
                             <label className="block text-[#7a94bb] text-[10px] font-bold uppercase tracking-widest pl-2">2. Data Component</label>
                             <div className="grid grid-cols-2 gap-3">
@@ -118,7 +149,6 @@ const RequestAccess = () => {
                             </div>
                         </div>
 
-                        {/* Reason */}
                         <div className="space-y-4">
                             <label className="block text-[#7a94bb] text-[10px] font-bold uppercase tracking-widest pl-2">3. Purpose of Access</label>
                             <textarea
@@ -130,8 +160,8 @@ const RequestAccess = () => {
                         </div>
 
                         <button
-                            onClick={handleSubmit}
-                            disabled={!selectedRefugee || !selectedField || isSubmitting}
+                            onClick={handleRequest}
+                            disabled={!walletAddress || !selectedField || isSubmitting}
                             className="w-full bg-[#00c9b1] text-[#060d1f] font-bold py-4 rounded-xl hover:bg-[#00e0c5] active:scale-95 transition-all text-sm tracking-widest uppercase disabled:opacity-40 flex items-center justify-center gap-3"
                         >
                             {isSubmitting ? <><Loader2 size={20} className="animate-spin" /> SUBMITTING...</> : 'SUBMIT CONSENT REQUEST'}
@@ -164,7 +194,9 @@ const RequestAccess = () => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto max-h-[700px]">
-                        {filteredRequests.length === 0 ? (
+                        {isLoading ? (
+                            <div className="flex justify-center py-20"><Loader2 className="animate-spin text-[#00c9b1]" /></div>
+                        ) : filteredRequests.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-center text-[#3d5278]">
                                 <Clock size={48} className="mb-4 opacity-20" />
                                 <p className="text-sm font-medium">No history found</p>
@@ -185,8 +217,8 @@ const RequestAccess = () => {
                                                         req.status === 'rejected' ? <AlertCircle size={16} /> : <Clock size={16} />}
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-bold text-[#e2eaf8]">{req.refugeeName}</p>
-                                                    <p className="text-[10px] text-[#7a94bb]">{req.requestedField}</p>
+                                                    <p className="text-sm font-bold text-[#e2eaf8]">{req.name || 'Refugee'}</p>
+                                                    <p className="text-[10px] text-[#7a94bb] uppercase tracking-tighter">{req.requestedField}</p>
                                                 </div>
                                             </div>
                                             <div className={clsx(
@@ -198,9 +230,8 @@ const RequestAccess = () => {
                                                 {req.status}
                                             </div>
                                         </div>
-
                                         <div className="flex items-center justify-between text-[10px] text-[#3d5278]">
-                                            <span>{new Date(req.requestedAt).toLocaleDateString()} at {new Date(req.requestedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <span>{new Date(req.requestedAt || Date.now()).toLocaleDateString()}</span>
                                             <ChevronRight size={14} className="group-hover:text-[#00c9b1] transition-colors" />
                                         </div>
                                     </div>
