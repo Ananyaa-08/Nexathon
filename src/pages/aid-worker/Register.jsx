@@ -72,22 +72,49 @@ const Register = () => {
         }, 3000);
     };
 
-    const handleRegister = () => {
+    const handleRegister = async () => {
         setIsSubmitting(true);
-        setSubmitStage(1);
+        setSubmitStage(1); // "Validating form data"
 
-        setTimeout(() => setSubmitStage(2), 600);
-        setTimeout(() => setSubmitStage(3), 900);
-        setTimeout(() => setSubmitStage(4), 1200);
-        setTimeout(() => setSubmitStage(5), 2000);
-        setTimeout(() => {
-            setSubmitStage(6);
-            setTimeout(() => {
-                setShowSuccess(true);
-                setIsSubmitting(false);
-                showToast('success', 'Registration Complete', 'Refugee identity has been permanently recorded.');
-            }, 500);
-        }, 3000);
+        try {
+            // 1. Grab your teammate's Ngrok URL from your .env file
+            const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+            // 2. Actually send the data to the backend!
+            // UPDATED: Now pointing exactly to /register
+            const response = await fetch(`${BASE_URL}/register`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    name: formData.fullName,
+                    dob: formData.dob,
+                    nationality: formData.nationality,
+                    camp: formData.campId,
+                    walletAddress: formData.walletAddress,
+                    walletType: formData.walletType
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`Backend rejected the registration. Status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log("Success! Backend says:", data);
+
+            // 3. Make the UI show success!
+            setSubmitStage(6); // Skip the fake visual steps to show it's done
+            setShowSuccess(true);
+            setIsSubmitting(false);
+            showToast('success', 'Registration Complete', 'Refugee identity permanently saved by backend.');
+
+        } catch (error) {
+            console.error("Connection Error:", error);
+            setIsSubmitting(false);
+            showToast('error', 'Network Error', 'Failed to connect to the backend server.');
+        }
     };
 
     const addLanguage = (e) => {

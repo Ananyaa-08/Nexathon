@@ -22,36 +22,63 @@ const ScanQR = () => {
             showToast('info', 'Identity Found', `Successfully scanned ${refugee.name}'s QR code.`);
         }, 1500);
     };
-
-    const handleRealScan = (scannedData) => {
+const handleRealScan = async (scannedData) => {
         if (scannedData && scannedData.length > 0) {
             try {
-                // The scanner found the QR text! Let's turn it back into a JavaScript object.
-                const data = JSON.parse(scannedData[0].rawValue);
+                // 1. Get the wallet address from the QR text
+                const qrData = JSON.parse(scannedData[0].rawValue);
+                const walletAddress = qrData.address;
 
-                // Pretend we matched this wallet address to our database
-                const refugee = MOCK_REFUGEES.find(r => r.id === data.id) || MOCK_REFUGEES[0];
+                setIsScanning(true);
+                const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-                setResult(refugee);
+                // 2. Ask the backend for this person's profile
+                const response = await fetch(`${BASE_URL}/verify-login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ walletAddress: walletAddress })
+                });
+
+                if (!response.ok) throw new Error("Profile not found in database");
+
+                const profile = await response.json();
+                
+                // 3. Show the real profile!
+                setResult(profile);
                 setIsScanning(false);
-                showToast('success', 'Identity Verified', `Successfully scanned ${data.name}'s secure QR card.`);
+                showToast('success', 'Identity Verified', `Successfully fetched profile from backend.`);
             } catch (error) {
-                console.error("Not a valid RIMS QR Code");
+                console.error("Scan error", error);
+                setIsScanning(false);
+                showToast('error', 'Verification Failed', 'Could not verify this QR code with the server.');
             }
         }
     };
-
-    const handleManualLookup = () => {
+   const handleManualLookup = async () => {
         if (!manualAddress.trim()) return;
         setIsScanning(true);
         setResult(null);
 
-        setTimeout(() => {
+        try {
+            const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+            
+            // Ask the backend for the typed-in address
+            const response = await fetch(`${BASE_URL}/verify-login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ walletAddress: manualAddress.trim() })
+            });
+
+            if (!response.ok) throw new Error("Profile not found");
+
+            const profile = await response.json();
+            setResult(profile);
             setIsScanning(false);
-            const refugee = MOCK_REFUGEES.find(r => r.walletAddress.includes(manualAddress.toUpperCase())) || MOCK_REFUGEES[1];
-            setResult(refugee);
-            showToast('success', 'Address Resolved', 'Wallet mapped to a registered identity.');
-        }, 1000);
+            showToast('success', 'Address Resolved', 'Profile fetched from backend.');
+        } catch (error) {
+            setIsScanning(false);
+            showToast('error', 'Not Found', 'No identity found for this wallet address.');
+        }
     };
 
     return (

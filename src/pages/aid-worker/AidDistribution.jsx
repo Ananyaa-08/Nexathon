@@ -4,50 +4,94 @@ import {
     MapPin, Globe, Loader2, ArrowRight, X
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { MOCK_REFUGEES } from '../../utils/mockData';
 import { useToast } from '../../context/ToastContext';
-import { LoadingSpinner } from '../../components/ui/Common';
 
 const AidDistribution = () => {
     const { showToast } = useToast();
-    const [selectedRefugee, setSelectedRefugee] = useState(MOCK_REFUGEES[0]);
+    const [selectedRefugee, setSelectedRefugee] = useState(null); // Starts empty
+    const [searchTerm, setSearchTerm] = useState('');
     const [isConfirming, setIsConfirming] = useState(false);
     const [pendingAid, setPendingAid] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // Mock aid types
-    const AID_TYPES = [
+    // Local state for UI updates
+    const [aidStatus, setAidStatus] = useState([
         { id: 'food', name: 'Food Rations', icon: '🍞', claimed: false },
-        { id: 'meds', name: 'Medical Kit', icon: '🏥', claimed: true, timestamp: '2024-02-10T14:30:00Z' },
+        { id: 'meds', name: 'Medical Kit', icon: '🏥', claimed: false },
         { id: 'shelter', name: 'Shelter Items', icon: '🏠', claimed: false },
         { id: 'cash', name: 'Cash Assistance', icon: '💵', claimed: false },
         { id: 'clothing', name: 'Essentials Kit', icon: '👕', claimed: false },
-    ];
+    ]);
 
-    const [aidStatus, setAidStatus] = useState(AID_TYPES);
+    // 1. Search for the refugee in the backend
+    const handleSearch = async (e) => {
+        if (e.key === 'Enter' && searchTerm.trim()) {
+            try {
+                const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+                const response = await fetch(`${BASE_URL}/verify-login`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ walletAddress: searchTerm.trim() })
+                });
+
+                if (!response.ok) throw new Error("Not found");
+                const profile = await response.json();
+setSelectedRefugee({ ...profile, walletAddress: searchTerm.trim() });
+                showToast('success', 'Refugee Found', 'Profile loaded for aid distribution.');
+            } catch (error) {
+                showToast('error', 'Not Found', 'No refugee found with that address.');
+            }
+        }
+    };
 
     const handleIssue = (aid) => {
         if (aid.claimed) {
             showToast('error', 'Action Blocked', 'This specific aid has already been claimed and recorded on-chain.');
             return;
         }
+        if (!selectedRefugee) {
+            showToast('warning', 'No Refugee', 'Please search for a refugee first.');
+            return;
+        }
         setPendingAid(aid);
         setIsConfirming(true);
     };
 
-    const confirmDistribution = () => {
+    // 2. Tell backend they claimed aid
+    const confirmDistribution = async () => {
         setIsConfirming(false);
         setIsProcessing(true);
 
-        // Simulate blockchain confirmation
-        setTimeout(() => {
+        try {
+            const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+            const response = await fetch(`${BASE_URL}/aid/claim`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ walletAddress: selectedRefugee.walletAddress })
+            });
+
+            const data = await response.json();
+
+            // If the backend sends an error (like "Already claimed")
+            if (!response.ok || data.error) {
+                throw new Error(data.error || "Transaction blocked by backend.");
+            }
+
+            // Success: Update UI
             setAidStatus(prev => prev.map(a =>
                 a.id === pendingAid.id ? { ...a, claimed: true, timestamp: new Date().toISOString() } : a
             ));
             setIsProcessing(false);
             setPendingAid(null);
-            showToast('success', 'Transaction Confirmed', 'Aid package successfully issued and recorded to Algorand.');
-        }, 2500);
+            showToast('success', 'Transaction Confirmed', 'Backend confirmed aid distribution.');
+
+        } catch (error) {
+            console.error("Claim Error:", error);
+            setIsProcessing(false);
+            setPendingAid(null);
+            showToast('error', 'Action Blocked', error.message);
+        }
     };
 
     return (
@@ -64,14 +108,22 @@ const AidDistribution = () => {
                     </div>
                     <input
                         className="w-full bg-[#0f1e38] border border-[#1a2d4a] rounded-xl pl-11 pr-4 py-3 text-[#e2eaf8] text-sm focus:outline-none focus:border-[#00c9b1] placeholder-[#3d5278] transition-all"
-                        placeholder="Scan or search refugee..."
+                        placeholder="Enter wallet address & press Enter..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onKeyDown={handleSearch}
                     />
                 </div>
             </div>
 
             {/* Refugee Profile Bar */}
-            {selectedRefugee && (
-                <div className="bg-[#0f1e38] border border-[#1a2d4a] rounded-2xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-xl relative overflow-hidden">
+            {!selectedRefugee ? (
+                <div className="bg-[#0f1e38] border border-[#1a2d4a] rounded-2xl p-10 flex flex-col items-center justify-center text-center text-[#3d5278]">
+                    <Search size={48} className="mb-4 opacity-50" />
+                    <p className="text-sm font-medium uppercase tracking-widest">Search for a refugee to issue aid</p>
+                </div>
+            ) : (
+                <div className="bg-[#0f1e38] border border-[#1a2d4a] rounded-2xl p-6 flex flex-col md:flex-row items-center gap-6 shadow-xl relative overflow-hidden animate-fadeIn">
                     <div className="absolute top-0 right-0 p-3">
                         <div className="flex items-center gap-2 px-3 py-1 bg-[#10b98110] border border-[#10b98120] rounded-lg">
                             <CheckCircle size={14} className="text-[#10b981]" />
@@ -80,22 +132,22 @@ const AidDistribution = () => {
                     </div>
 
                     <div className="w-20 h-20 bg-[#152342] rounded-2xl flex items-center justify-center text-3xl font-bold text-[#00c9b1] border border-[#1a2d4a]">
-                        {selectedRefugee.name.split(' ').map(n => n[0]).join('')}
+                        {selectedRefugee.name ? selectedRefugee.name.charAt(0).toUpperCase() : 'U'}
                     </div>
 
                     <div className="flex-1 text-center md:text-left">
                         <h3 className="text-2xl font-bold text-[#e2eaf8] mb-1">{selectedRefugee.name}</h3>
                         <div className="flex flex-wrap justify-center md:justify-start gap-4 text-xs text-[#7a94bb] font-medium">
-                            <span className="flex items-center gap-1.5"><MapPin size={14} /> {selectedRefugee.campID}</span>
-                            <span className="flex items-center gap-1.5"><Globe size={14} /> {selectedRefugee.nationality}</span>
-                            <span className="font-mono text-[#3d5278] uppercase">{selectedRefugee.id}</span>
+                            <span className="flex items-center gap-1.5"><MapPin size={14} /> {selectedRefugee.campID || 'N/A'}</span>
+                            <span className="flex items-center gap-1.5"><Globe size={14} /> {selectedRefugee.nationality || 'N/A'}</span>
+                            <span className="font-mono text-[#3d5278] uppercase">{selectedRefugee.id || selectedRefugee._id || 'NO-ID'}</span>
                         </div>
                     </div>
 
                     <div className="bg-[#060d1f] p-4 rounded-xl border border-[#1a2d4a] w-full md:w-auto">
                         <label className="block text-[#3d5278] text-[9px] font-bold uppercase tracking-[0.2em] mb-2">Connected Address</label>
                         <div className="font-mono text-[#00c9b1] text-xs">
-                            {selectedRefugee.walletAddress.slice(0, 10)}...{selectedRefugee.walletAddress.slice(-8)}
+                            {selectedRefugee.walletAddress ? `${selectedRefugee.walletAddress.slice(0, 10)}...${selectedRefugee.walletAddress.slice(-8)}` : 'UNKNOWN'}
                         </div>
                     </div>
                 </div>
@@ -141,8 +193,8 @@ const AidDistribution = () => {
                                     <div className="flex items-center gap-2 text-[#3d5278] text-[10px] uppercase font-bold tracking-widest mb-1.5">
                                         <Clock size={12} /> Issuance Log
                                     </div>
-                                    <p className="text-[#7a94bb] text-[11px]">Recorded Dec 12, 2024</p>
-                                    <p className="text-[#3d5278] font-mono text-[9px] mt-1 truncate">Tx: 0xabc123...4321</p>
+                                    <p className="text-[#7a94bb] text-[11px]">Recorded Just Now</p>
+                                    <p className="text-[#3d5278] font-mono text-[9px] mt-1 truncate">Tx: Secured On-Chain</p>
                                 </div>
                                 <button disabled className="w-full py-3 bg-[#1a2d4a] text-[#3d5278] text-xs font-bold uppercase tracking-widest rounded-xl cursor-not-allowed">
                                     Already Distributed
@@ -153,7 +205,8 @@ const AidDistribution = () => {
                                 <p className="text-[#7a94bb] text-xs">Standard humanitarian package for {aid.name.toLowerCase()}.</p>
                                 <button
                                     onClick={() => handleIssue(aid)}
-                                    className="w-full py-3 bg-[#00c9b1] text-[#060d1f] text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#00e0c5] transition-all group-hover:shadow-[0_0_20px_rgba(0,201,177,0.2)]"
+                                    disabled={!selectedRefugee}
+                                    className="w-full py-3 bg-[#00c9b1] text-[#060d1f] text-xs font-bold uppercase tracking-widest rounded-xl hover:bg-[#00e0c5] transition-all group-hover:shadow-[0_0_20px_rgba(0,201,177,0.2)] disabled:opacity-50 disabled:hover:bg-[#00c9b1] disabled:hover:shadow-none"
                                 >
                                     Issue Aid Package
                                 </button>
@@ -222,11 +275,6 @@ const AidDistribution = () => {
                         <p className="text-[#7a94bb] text-lg tracking-wide uppercase border-l-2 border-[#00c9b1] pl-6 h-8 flex items-center">
                             Updating Global Registry...
                         </p>
-
-                        <div className="mt-12 space-y-2 opacity-50">
-                            <div className="font-mono text-[10px] text-[#00c9b1]">Executing Smart Contract call (0xc412...)</div>
-                            <div className="font-mono text-[10px] text-[#00c9b1]">Submitting to Block #18429112</div>
-                        </div>
                     </div>
                 </div>
             )}
