@@ -5,14 +5,17 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useToast } from '../../context/ToastContext';
+import { useWallet } from '../../context/WalletContext';
 
 const AidDistribution = () => {
     const { showToast } = useToast();
+    const { account } = useWallet();
     const [selectedRefugee, setSelectedRefugee] = useState(null); // Starts empty
     const [searchTerm, setSearchTerm] = useState('');
     const [isConfirming, setIsConfirming] = useState(false);
     const [pendingAid, setPendingAid] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     // Local state for UI updates
     const [aidStatus, setAidStatus] = useState([
@@ -30,7 +33,10 @@ const AidDistribution = () => {
                 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
                 const response = await fetch(`${BASE_URL}/verify-login`, {
                     method: "POST",
-                    headers: { "Content-Type": "application/json" },
+                    headers: {
+                        "Content-Type": "application/json",
+                        "ngrok-skip-browser-warning": "69420"
+                    },
                     body: JSON.stringify({ walletAddress: searchTerm.trim() })
                 });
 
@@ -61,29 +67,54 @@ const AidDistribution = () => {
     const confirmDistribution = async () => {
         setIsConfirming(false);
         setIsProcessing(true);
+        setIsSubmitting(true);
 
         try {
             const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
+            // DYNAMIC SESSION: Pull wallet address from localStorage or Context
+            const sessionWallet = localStorage.getItem('walletAddress') || localStorage.getItem('demo_account') || account;
+            const claimAddress = selectedRefugee?.walletAddress || sessionWallet;
+
+            if (!claimAddress) {
+                throw new Error("No active wallet session found. Please login first.");
+            }
+
             const response = await fetch(`${BASE_URL}/aid/claim`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ walletAddress: selectedRefugee.walletAddress })
+                headers: {
+                    "Content-Type": "application/json",
+                    "ngrok-skip-browser-warning": "69420"
+                },
+                body: JSON.stringify({ walletAddress: claimAddress })
             });
 
             const data = await response.json();
 
             // If the backend sends an error (like "Already claimed")
-            if (!response.ok || data.error) {
+            if (response.status === 400 || response.status === 403 || data.error?.includes('already')) {
+                showToast('error', 'Already Claimed', 'This wallet has already received its allocated aid package');
+                throw new Error("Duplicate Claim");
+            }
+
+            if (!response.ok) {
                 throw new Error(data.error || "Transaction blocked by backend.");
             }
 
             // Success: Update UI
+            setAidStatus(prev => prev.map(a =>
+                a.id === pendingAid.id ? { ...a, claimed: true, timestamp: new Date().toISOString() } : a
+            ));
+            showToast('success', 'Transaction Confirmed', 'Aid package has been recorded on the Algorand ledger');
+
         } catch (error) {
-            console.error("Claim Error:", error);
-            showToast('error', 'Action Blocked', error.message);
+            if (error.message !== "Duplicate Claim") {
+                console.error("Claim Error:", error);
+                showToast('error', 'Action Blocked', error.message);
+            }
         } finally {
             setIsProcessing(false);
+            setIsSubmitting(false);
             setPendingAid(null);
         }
     };

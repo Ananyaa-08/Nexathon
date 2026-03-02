@@ -5,9 +5,12 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useToast } from '../../context/ToastContext';
+import { useWallet } from '../../context/WalletContext';
+import { peraWallet } from '../../utils/wallet';
 
 const AccessRequests = () => {
     const { showToast } = useToast();
+    const { account, connectWallet } = useWallet();
     const [activeTab, setActiveTab] = useState('Pending');
     const [requests, setRequests] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -32,10 +35,11 @@ const AccessRequests = () => {
 
             const data = await response.json();
 
-            // DEMO OVERRIDE: Show all requests intended for 'asmi'
-            // This matches the CUST9K... address seen in your teammate's database
-            const targetWallet = "CUST9K4LMNO5PQRT6UVWX7YZA8BCDE1F2GH";
-            const myRequests = data.filter(req => req.walletAddress === targetWallet);
+            // DYNAMIC FILTERING: Get current session wallet strictly from localStorage
+            const sessionWallet = localStorage.getItem('walletAddress') || localStorage.getItem('demo_account');
+
+            // Filter strictly by session wallet address
+            const myRequests = data.filter(req => req.walletAddress === sessionWallet);
 
             setRequests(myRequests);
         } catch (error) {
@@ -58,37 +62,44 @@ const AccessRequests = () => {
     );
 
     const handleApprove = async (req) => {
-        setSelectedRequest(req);
         setIsSigning(true);
         setSigningStage(1);
 
-        setTimeout(() => setSigningStage(2), 1000);
-        setTimeout(() => setSigningStage(3), 2000);
-
-        setTimeout(async () => {
-            try {
-                const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-                const response = await fetch(`${BASE_URL}/access/approve`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                        "ngrok-skip-browser-warning": "69420"
-                    },
-                    body: JSON.stringify({ requestId: req.id })
-                });
-
-                if (!response.ok) throw new Error("Failed to approve on backend");
-
-                showToast('success', 'Consent Granted', `Access authorized for ${req.requestedField}.`);
-                fetchRequests(); // Refresh the list immediately
-            } catch (error) {
-                console.error("Approve Error:", error);
-                showToast('error', 'Network Error', 'Failed to approve request.');
-            } finally {
-                setIsSigning(false);
-                setSigningStage(0);
+        try {
+            // Stage 1: Ensure wallet is connected
+            if (!account) {
+                await connectWallet();
             }
-        }, 3500);
+
+            setSigningStage(2);
+            // Stage 2: Wake up Pera app for verification
+            await peraWallet.reconnectSession();
+
+            setSigningStage(3);
+            // Stage 3: Brief delay for visual feedback
+            await new Promise(r => setTimeout(r, 1000));
+
+            const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+            const response = await fetch(`${BASE_URL}/access/approve`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "ngrok-skip-browser-warning": "69420"
+                },
+                body: JSON.stringify({ requestId: req.id })
+            });
+
+            if (!response.ok) throw new Error("Failed to approve on backend");
+
+            showToast('success', 'Consent Granted', `Access authorized for ${req.requestedField}.`);
+            fetchRequests(); // Refresh the list immediately
+        } catch (error) {
+            console.error("Approve Error:", error);
+            showToast('error', 'Signature Failed', 'User rejected the request.');
+        } finally {
+            setIsSigning(false);
+            setSigningStage(0);
+        }
     };
 
     const handleReject = async (req) => {
@@ -187,7 +198,7 @@ const AccessRequests = () => {
                                     </div>
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-3">
-                                            <h3 className="text-[#e2eaf8] font-bold text-lg">{req.name || 'Asmi'}</h3>
+                                            <h3 className="text-[#e2eaf8] font-bold text-lg">{req.name}</h3>
                                             <span className={clsx(
                                                 "px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-tight border",
                                                 req.status === 'pending' ? "bg-[#f59e0b10] text-[#f59e0b] border-[#f59e0b20]" :
@@ -200,7 +211,7 @@ const AccessRequests = () => {
                                         <p className="text-[#7a94bb] text-sm">Component: <span className="text-[#e2eaf8] font-semibold">{req.requestedField}</span></p>
                                         <div className="flex items-center gap-4 pt-1">
                                             <span className="text-[#3d5278] text-[10px] uppercase font-bold tracking-widest flex items-center gap-1.5">
-                                                <User className="w-3 h-3" /> By: {req.requestedBy || 'Aid Worker'}
+                                                <User className="w-3 h-3" /> By: {req.requestedBy}
                                             </span>
                                             <span className="text-[#3d5278] text-[10px] uppercase font-bold tracking-widest flex items-center gap-1.5">
                                                 <Clock className="w-3 h-3" /> {new Date(req.requestedAt || Date.now()).toLocaleDateString()}

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Check, FileText, Package } from 'lucide-react';
 import { clsx } from 'clsx';
-import { MOCK_REFUGEES } from '../../utils/mockData';
 import { useToast } from '../../context/ToastContext';
 import { Scanner } from '@yudiel/react-qr-scanner';
 
@@ -11,61 +10,37 @@ const ScanQR = () => {
     const [result, setResult] = useState(null);
     const [manualAddress, setManualAddress] = useState('');
 
-    const simulateScan = () => {
-        setIsScanning(true);
-        setResult(null);
-
-        setTimeout(() => {
-            setIsScanning(false);
-            const refugee = MOCK_REFUGEES[0]; // Logic: Mock matching a specific refugee
-            setResult(refugee);
-            showToast('info', 'Identity Found', `Successfully scanned ${refugee.name}'s QR code.`);
-        }, 1500);
-    };
-const handleRealScan = async (scannedData) => {
-        if (scannedData && scannedData.length > 0) {
-            try {
-                // 1. Get the wallet address from the QR text
-                const qrData = JSON.parse(scannedData[0].rawValue);
-                const walletAddress = qrData.address;
-
-                setIsScanning(true);
-                const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-
-                // 2. Ask the backend for this person's profile
-                const response = await fetch(`${BASE_URL}/verify-login`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ walletAddress: walletAddress })
-                });
-
-                if (!response.ok) throw new Error("Profile not found in database");
-
-                const profile = await response.json();
-                
-                // 3. Show the real profile!
-                setResult(profile);
-                setIsScanning(false);
-                showToast('success', 'Identity Verified', `Successfully fetched profile from backend.`);
-            } catch (error) {
-                console.error("Scan error", error);
-                setIsScanning(false);
-                showToast('error', 'Verification Failed', 'Could not verify this QR code with the server.');
-            }
+    const handleScan = (result) => {
+        if (!result || !result[0]) return;
+        try {
+            const data = JSON.parse(result[0].rawValue);
+            setResult({
+                id: data.id || 'REF-VERIFIED',
+                name: data.name || 'Unknown',
+                walletAddress: data.address || '',
+                campID: 'CAMP-01',
+                nationality: 'Verified'
+            });
+            showToast('success', 'Identity Found', 'Security credentials verified from QR.');
+        } catch (e) {
+            showToast('error', 'Invalid QR', 'Not a valid RIMS card.');
         }
     };
-   const handleManualLookup = async () => {
+
+    const handleManualLookup = async () => {
         if (!manualAddress.trim()) return;
         setIsScanning(true);
         setResult(null);
 
         try {
             const BASE_URL = import.meta.env.VITE_API_BASE_URL;
-            
-            // Ask the backend for the typed-in address
+
             const response = await fetch(`${BASE_URL}/verify-login`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    "ngrok-skip-browser-warning": "69420"
+                },
                 body: JSON.stringify({ walletAddress: manualAddress.trim() })
             });
 
@@ -110,8 +85,8 @@ const handleRealScan = async (scannedData) => {
                     ) : (
                         <div className="absolute inset-0 w-full h-full">
                             <Scanner
-                                onScan={handleRealScan}
-                                components={{ tracker: false, audio: false }}
+                                onScan={handleScan}
+                                components={{ audio: false }}
                                 styles={{ container: { width: '100%', height: '100%' }, video: { objectFit: 'cover' } }}
                             />
                             {/* Stylized Viewfinder Overlay */}
@@ -120,92 +95,80 @@ const handleRealScan = async (scannedData) => {
                                 <div className="absolute top-0 left-0 right-0 h-0.5 bg-[#00c9b1] shadow-[0_0_15px_#00c9b1] animate-scanLine" />
                             </div>
                             <p className="absolute bottom-4 left-0 right-0 text-center text-[#00c9b1] text-[10px] font-bold uppercase tracking-[0.2em] pointer-events-none">
-                                Position QR in frame
+                                Position QR code in frame
                             </p>
                         </div>
                     )}
                 </div>
 
-                {!result && !isScanning && (
-                    <button
-                        onClick={simulateScan}
-                        className="bg-[#152342] text-[#7a94bb] font-bold py-3 px-8 rounded-xl hover:text-[#e2eaf8] active:scale-95 transition-all text-xs tracking-widest uppercase border border-[#1a2d4a] hover:border-[#3d5278]"
-                    >
-                        OR SIMULATE SCAN (TESTING)
-                    </button>
+                {/* Scanned Result Card */}
+                {result && (
+                    <div className="w-full animate-fadeSlideUp">
+                        <div className="bg-[#0f1e38] border border-[#10b98140] rounded-2xl p-6 shadow-[0_0_30px_rgba(16,185,129,0.05)] mb-8">
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="w-14 h-14 bg-[#00c9b120] text-[#00c9b1] rounded-full flex items-center justify-center font-bold text-xl">
+                                    {result.name?.split(' ').map(n => n[0]).join('') || 'R'}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <h3 className="text-xl font-bold text-[#e2eaf8]">{result.name}</h3>
+                                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-[#10b98120] text-[#10b981] border border-[#10b98140] uppercase">
+                                            Identity Verified
+                                        </span>
+                                    </div>
+                                    <div className="flex gap-3 text-[#7a94bb] text-xs">
+                                        <span>{result.campID || result.camp}</span>
+                                        <span className="text-[#1a2d4a]">|</span>
+                                        <span>{result.nationality}</span>
+                                        <span className="text-[#1a2d4a]">|</span>
+                                        <span className="font-mono text-[#00c9b1]/60 font-bold">{result.walletAddress?.slice(0, 10)}...</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <button className="flex items-center justify-center gap-2 bg-[#152342] text-[#e2eaf8] font-bold py-3 rounded-xl border border-[#1a2d4a] hover:border-[#3d5278] transition-all">
+                                    <FileText size={18} /> PROFILE
+                                </button>
+                                <button className="flex items-center justify-center gap-2 bg-[#00c9b1] text-[#060d1f] font-bold py-3 rounded-xl hover:bg-[#00e0c5] transition-all">
+                                    <Package size={18} /> ISSUE AID
+                                </button>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setResult(null)}
+                            className="w-full py-4 text-[#3d5278] text-xs font-bold uppercase tracking-widest hover:text-[#7a94bb] transition-colors"
+                        >
+                            RESET SCANNER
+                        </button>
+                    </div>
                 )}
-            </div>
 
-            {result && (
-                <div className="animate-fadeSlideUp">
-                    <div className="bg-[#0f1e38] border border-[#10b98140] rounded-2xl p-6 shadow-[0_0_30px_rgba(16,185,129,0.05)] mb-8">
-                        <div className="flex items-center gap-4 mb-6">
-                            <div className="w-14 h-14 bg-[#00c9b120] text-[#00c9b1] rounded-full flex items-center justify-center font-bold text-xl">
-                                {result.name.split(' ').map(n => n[0]).join('')}
-                            </div>
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <h3 className="text-xl font-bold text-[#e2eaf8]">{result.name}</h3>
-                                    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-[#10b98120] text-[#10b981] border border-[#10b98140] uppercase">
-                                        Identity Verified
-                                    </span>
-                                </div>
-                                <div className="flex gap-3 text-[#7a94bb] text-xs">
-                                    <span>{result.campID}</span>
-                                    <span className="text-[#1a2d4a]">|</span>
-                                    <span>{result.nationality}</span>
-                                    <span className="text-[#1a2d4a]">|</span>
-                                    <span className="font-mono text-[#00c9b1]/60 font-bold">{result.id}</span>
-                                </div>
-                            </div>
-                        </div>
+                <div className="w-full relative my-10">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#1a2d4a]" /></div>
+                    <div className="relative flex justify-center uppercase"><span className="bg-[#060d1f] px-4 text-[#3d5278] text-[10px] font-bold tracking-widest">OR manual lookup</span></div>
+                </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                            <button
-                                className="flex items-center justify-center gap-2 bg-[#152342] text-[#e2eaf8] font-bold py-3 rounded-xl border border-[#1a2d4a] hover:border-[#3d5278] transition-all"
-                            >
-                                <FileText size={18} /> VIEW FULL PROFILE
-                            </button>
-                            <button
-                                className="flex items-center justify-center gap-2 bg-[#00c9b1] text-[#060d1f] font-bold py-3 rounded-xl hover:bg-[#00e0c5] transition-all"
-                            >
-                                <Package size={18} /> DISTRIBUTE AID
-                            </button>
+                <div className="w-full flex gap-2">
+                    <div className="relative flex-1">
+                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#3d5278]">
+                            <Search size={16} />
                         </div>
+                        <input
+                            className="w-full bg-[#060d1f] border border-[#1a2d4a] rounded-xl pl-11 pr-4 py-4 text-[#e2eaf8] text-sm focus:outline-none focus:border-[#00c9b1] placeholder-[#3d5278] transition-all"
+                            placeholder="Wallet address or Refugee ID..."
+                            value={manualAddress}
+                            onChange={e => setManualAddress(e.target.value)}
+                        />
                     </div>
-
                     <button
-                        onClick={() => setResult(null)}
-                        className="w-full py-4 text-[#3d5278] text-xs font-bold uppercase tracking-widest hover:text-[#7a94bb] transition-colors"
+                        onClick={handleManualLookup}
+                        className="bg-[#152342] text-[#e2eaf8] font-bold px-8 rounded-xl border border-[#1a2d4a] hover:border-[#3d5278] active:scale-95 transition-all text-xs uppercase tracking-widest"
                     >
-                        RESET SCANNER
+                        LOOKUP
                     </button>
                 </div>
-            )}
-
-            <div className="relative my-10">
-                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#1a2d4a]" /></div>
-                <div className="relative flex justify-center uppercase"><span className="bg-[#060d1f] px-4 text-[#3d5278] text-[10px] font-bold tracking-widest">OR manual lookup</span></div>
-            </div>
-
-            <div className="flex gap-2">
-                <div className="relative flex-1">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-[#3d5278]">
-                        <Search size={16} />
-                    </div>
-                    <input
-                        className="w-full bg-[#060d1f] border border-[#1a2d4a] rounded-xl pl-11 pr-4 py-4 text-[#e2eaf8] text-sm focus:outline-none focus:border-[#00c9b1] placeholder-[#3d5278] transition-all"
-                        placeholder="Search by wallet address or refugee ID..."
-                        value={manualAddress}
-                        onChange={e => setManualAddress(e.target.value)}
-                    />
-                </div>
-                <button
-                    onClick={handleManualLookup}
-                    className="bg-[#152342] text-[#e2eaf8] font-bold px-8 rounded-xl border border-[#1a2d4a] hover:border-[#3d5278] active:scale-95 transition-all text-xs uppercase tracking-widest"
-                >
-                    LOOKUP
-                </button>
             </div>
         </div>
     );

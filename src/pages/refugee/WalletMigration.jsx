@@ -8,10 +8,13 @@ import { clsx } from 'clsx';
 import { MOCK_REFUGEES } from '../../utils/mockData';
 import { useToast } from '../../context/ToastContext';
 import { LoadingSpinner } from '../../components/ui/Common';
+import { useWallet } from '../../context/WalletContext';
+import { peraWallet } from '../../utils/wallet';
 
 const WalletMigration = () => {
     const navigate = useNavigate();
     const { showToast } = useToast();
+    const { account, connectWallet: contextConnectWallet } = useWallet();
     const [step, setStep] = useState(1);
     const [isProcessing, setIsProcessing] = useState(false);
     const [migrationData, setMigrationData] = useState({
@@ -31,30 +34,47 @@ const WalletMigration = () => {
         }, 1500);
     };
 
-    const connectWallet = () => {
+    const connectWallet = async () => {
         setIsProcessing(true);
-        setTimeout(() => {
+        try {
+            await contextConnectWallet();
+            // Note: WalletContext will update 'account'
+            // We'll use the updated account when it's available
             setMigrationData(prev => ({
                 ...prev,
-                newAddress: 'PERA3N8OPQR9STU4VWX5YZA6BCD7EFGHIJK',
+                newAddress: 'Awaiting Handshake...', // Temporary until account is confirmed
                 isWalletConnected: true
             }));
+
+            // Re-sync with the real account once connected (demo logic)
+            const realAccount = localStorage.getItem('walletAddress');
+            if (realAccount) {
+                setMigrationData(prev => ({ ...prev, newAddress: realAccount }));
+            }
+
             setIsProcessing(false);
             showToast('success', 'Wallet Linked', 'Your new Pera wallet has been securely paired.');
-        }, 2000);
+        } catch (error) {
+            console.error("Connection Error:", error);
+            setIsProcessing(false);
+            showToast('error', 'Connection Failed', 'User rejected the connection request.');
+        }
     };
 
-   const finalSubmit = async () => {
+    const finalSubmit = async () => {
         setIsProcessing(true);
-        
+
         try {
+            // Force a real wallet interaction to "sign" the migration
+            await peraWallet.reconnectSession();
+
             const BASE_URL = import.meta.env.VITE_API_BASE_URL;
             const response = await fetch(`${BASE_URL}/migrate-wallet`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
+                body: JSON.stringify({
                     oldWalletAddress: migrationData.refugee.walletAddress,
-                    newWalletAddress: migrationData.newAddress
+                    newWalletAddress: migrationData.newAddress === 'Awaiting Handshake...' ? account : migrationData.newAddress
                 })
             });
 
@@ -66,7 +86,7 @@ const WalletMigration = () => {
         } catch (error) {
             console.error("Migration Error:", error);
             setIsProcessing(false);
-            showToast('error', 'Migration Failed', 'Could not complete the migration on the backend.');
+            showToast('error', 'Migration Failed', 'User rejected the signature or backend failed.');
         }
     };
 

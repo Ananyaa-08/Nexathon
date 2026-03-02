@@ -18,12 +18,14 @@ This file contains the complete source code for the RIMS (Refugee Identity Manag
     },
     "dependencies": {
         "@perawallet/connect": "^1.5.1",
+        "@yudiel/react-qr-scanner": "^2.5.1",
         "clsx": "^2.1.0",
         "lucide-react": "^0.344.0",
         "qrcode.react": "^4.2.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-router-dom": "^6.22.1",
+        "react-webcam": "^7.2.0",
         "tailwind-merge": "^2.2.1"
     },
     "devDependencies": {

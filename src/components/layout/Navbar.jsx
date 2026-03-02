@@ -1,10 +1,16 @@
 import React from 'react';
-import { Shield } from 'lucide-react';
-import { useWallet } from '../../context/WalletContext'; // <-- 1. We import the "intercom"
+import { useNavigate } from 'react-router-dom';
+import { Shield, LogOut } from 'lucide-react';
+import { useWallet } from '../../context/WalletContext';
 
 export const Navbar = ({ role }) => {
-    // 2. We grab the real account and the buttons from the intercom
+    const navigate = useNavigate();
     const { account, connectWallet, disconnectWallet } = useWallet();
+
+    const handleExit = async () => {
+        await disconnectWallet();
+        navigate('/');
+    };
 
     return (
         <nav className="fixed top-0 left-0 right-0 h-16 bg-[#0a1428] border-b border-[#1a2d4a] flex items-center justify-between px-6 z-40">
@@ -33,7 +39,6 @@ export const Navbar = ({ role }) => {
                     </span>
                 )}
 
-                {/* 3. This box shows the real address if connected, or "DISCONNECTED" if not */}
                 <div className="flex items-center gap-2.5 bg-[#152342] border border-[#1a2d4a] rounded-lg px-3 py-1.5">
                     <div className={account ? "w-2 h-2 bg-[#10b981] rounded-full glow-teal" : "w-2 h-2 bg-[#ef4444] rounded-full"}></div>
                     <span className="font-mono text-[#00c9b1] text-xs font-medium tracking-tight">
@@ -41,7 +46,6 @@ export const Navbar = ({ role }) => {
                     </span>
                 </div>
 
-                {/* 4. The magic buttons that actually open the Pera Wallet app */}
                 {!account ? (
                     <button onClick={connectWallet} className="text-xs font-bold bg-[#00c9b1] text-[#060d1f] px-4 py-1.5 rounded hover:bg-[#00e0c5] transition-colors shadow-[0_0_15px_rgba(0,201,177,0.2)]">
                         CONNECT
@@ -51,6 +55,16 @@ export const Navbar = ({ role }) => {
                         DISCONNECT
                     </button>
                 )}
+
+                {/* Global Exit Button - ALWAYS VISIBLE IN PORTALS */}
+                <button
+                    onClick={handleExit}
+                    className="flex items-center gap-2 text-[#7a94bb] hover:text-[#ef4444] transition-colors border-l border-[#1a2d4a] pl-4 ml-2 group"
+                    title="Exit to Portal Selection"
+                >
+                    <LogOut size={16} className="group-hover:translate-x-1 transition-transform" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest hidden md:block">Exit Portal</span>
+                </button>
             </div>
         </nav>
     );

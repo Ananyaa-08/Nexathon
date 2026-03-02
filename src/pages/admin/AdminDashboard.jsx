@@ -1,16 +1,42 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Users, Package, ArrowLeftRight, ShieldAlert,
     ArrowRight, TrendingUp, TrendingDown, Clock,
-    Download
+    Download, CheckCircle, UserPlus, ShieldCheck
 } from 'lucide-react';
 import { MOCK_STATS, MOCK_AUDIT_LOG } from '../../utils/mockData';
 import { StatCard } from '../../components/ui/Common';
 import { clsx } from 'clsx';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../../context/ToastContext';
 
 const AdminDashboard = () => {
     const navigate = useNavigate();
+    const { showToast } = useToast();
+    const [pendingWorkers, setPendingWorkers] = useState([]);
+
+    // Load pending staff registrations from localStorage
+    useEffect(() => {
+        const loadPending = () => {
+            const workers = JSON.parse(localStorage.getItem('demo_aid_workers') || '[]');
+            setPendingWorkers(workers.filter(w => w.status === 'pending'));
+        };
+        loadPending();
+
+        // Polling for demo responsiveness
+        const interval = setInterval(loadPending, 5000);
+        return () => clearInterval(interval);
+    }, []);
+
+    const handleApproveWorker = (workerId) => {
+        const workers = JSON.parse(localStorage.getItem('demo_aid_workers') || '[]');
+        const updated = workers.map(w =>
+            w.id === workerId ? { ...w, status: 'approved' } : w
+        );
+        localStorage.setItem('demo_aid_workers', JSON.stringify(updated));
+        setPendingWorkers(prev => prev.filter(w => w.id !== workerId));
+        showToast('success', 'Staff Approved', 'Aid worker can now log in.');
+    };
 
     return (
         <div className="page-enter space-y-8 pb-20">
@@ -116,6 +142,56 @@ const AdminDashboard = () => {
                         ))}
                     </div>
                 </div>
+            </div>
+
+            {/* Staff Approval Queue */}
+            <div className="bg-[#0f1e38] border border-[#1a2d4a] rounded-2xl p-8 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-[#00c9b1] opacity-[0.02] rounded-full -mr-16 -mt-16 blur-3xl"></div>
+
+                <div className="flex items-center justify-between mb-8 pb-4 border-b border-[#1a2d4a]">
+                    <div className="flex items-center gap-3">
+                        <UserPlus size={18} className="text-[#00c9b1]" />
+                        <h3 className="text-[#e2eaf8] font-bold uppercase tracking-wider text-sm">Pending Staff Approvals</h3>
+                    </div>
+                    {pendingWorkers.length > 0 && (
+                        <span className="bg-[#00c9b110] text-[#00c9b1] text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#00c9b120]">
+                            {pendingWorkers.length} AWAITING ACTION
+                        </span>
+                    )}
+                </div>
+
+                {pendingWorkers.length === 0 ? (
+                    <div className="py-10 text-center">
+                        <ShieldCheck size={40} className="text-[#1a2d4a] mx-auto mb-4 opacity-20" />
+                        <p className="text-[#3d5278] text-sm italic">No pending staff registrations.</p>
+                    </div>
+                ) : (
+                    <div className="grid gap-4">
+                        {pendingWorkers.map((worker) => (
+                            <div key={worker.id} className="flex items-center justify-between p-4 bg-[#0a1428] border border-[#1a2d4a] rounded-xl hover:border-[#00c9b140] transition-colors group">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 bg-[#152342] rounded-full flex items-center justify-center text-[#00c9b1] font-bold border border-[#1a2d4a]">
+                                        {worker.name[0]}
+                                    </div>
+                                    <div>
+                                        <div className="text-[#e2eaf8] font-bold text-sm tracking-wide">{worker.name}</div>
+                                        <div className="text-[#7a94bb] font-mono text-[10px] flex items-center gap-2">
+                                            ID: <span className="text-[#00c9b1]">{worker.id}</span>
+                                            <span className="text-[#1a2d4a]">|</span>
+                                            Status: <span className="text-yellow-500/80">Pending</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => handleApproveWorker(worker.id)}
+                                    className="flex items-center gap-2 bg-[#00c9b1] text-[#060d1f] font-bold px-4 py-2 rounded-lg hover:bg-[#00e0c5] active:scale-95 transition-all text-[10px] uppercase tracking-widest shadow-[0_0_15px_rgba(0,201,177,0.1)]"
+                                >
+                                    <CheckCircle size={14} /> APPROVE
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Recent Activity */}
